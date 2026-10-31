@@ -1,19 +1,15 @@
 # Domestic Gc Analyst
 
-Personal grocery analytics dashboard: Telegram receipts → Make.com/Gemini → Supabase → Streamlit.
+Grocery analytics dashboard: Telegram bill photos → Make.com + Gemini → Supabase → Streamlit.
 
-## Run locally
-```
-pip install -r requirements.txt
-streamlit run app.py
-```
-Create `.streamlit/secrets.toml` (never commit it):
-```toml
-[supabase]
-url = "https://<project>.supabase.co"
-key = "<anon key>"
-```
+- **Taking over / setting up:** read [`SETUP.md`](SETUP.md).
+- **What's done and what's next:** [`STATUS.md`](STATUS.md).
+- **How it all works (for developers and AI agents):** [`AGENTS.md`](AGENTS.md).
+- **Database scripts:** [`sql/`](sql/).
 
-## Deploy (Streamlit Community Cloud)
-Deploy this private repo at share.streamlit.io, paste the secrets above under
-**Advanced settings → Secrets**, then use **Share** to invite viewers by email.
+Run locally:
+```
+python -m pip install -r requirements.txt
+python -m streamlit run app.py
+```
+Needs `.streamlit/secrets.toml` (copy `secrets.example.toml`). Never commit it.
