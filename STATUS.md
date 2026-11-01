@@ -1,48 +1,41 @@
-# STATUS — Domestic Gc Analyst
+# STATUS — Domestic Gc Analyst (Grocery Dashboard)
 
-_Last updated: 1 Nov 2026, at handover._
+_Last updated: 1 Nov 2026._
 
-## Live now
-- App: https://domestic-gc-analyst.streamlit.app, deployed from `main`.
-- `main` has the single-item dashboard (see `AGENTS.md` → "Two versions").
-- Supabase: `receipts` + `line_items` with anon read policies. Make.com scenario is
-  saving bills from Telegram.
+## Live Now
+- **App URL:** https://grocery-dash.streamlit.app (deployed from `main` on Snehil's Streamlit account).
+- **Repository:** https://github.com/Snehil1618/grocery-dashboard (public repository; no secrets or personal data committed).
+- **Personal-Links Version:** Shipped and running as `app.py`. Admin access code verified and working. The old `next/` folder has been removed.
+- **Bill Senders:** Snehil is currently the sole person sending bill photos to the Telegram bot, so all receipts belong to Snehil.
+- **Database & Secrets:** `sql/000_read_policies.sql` and `sql/001_people.sql` applied in Supabase. Streamlit Cloud secrets are configured with the new Supabase publishable key and `public_url`.
 
-## Handover checklist (owner)
-- [ ] Accept the GitHub repository transfer.
-- [ ] Deploy the app from **your** Streamlit Cloud account (see `SETUP.md`), using the
-      same address after the previous developer deletes theirs.
-- [ ] **Rotate the Supabase API keys** (Project Settings → API) and put the new anon key in
-      Streamlit's Secrets. The old key was used on the previous developer's machine.
-- [ ] Change any Supabase / Make.com / Telegram passwords the previous developer knew.
+## Handover Checklist (Owner)
+- [x] Accept the GitHub repository transfer.
+- [x] Deploy the app from your Streamlit Cloud account at https://grocery-dash.streamlit.app.
+- [x] Configure Supabase API keys (Streamlit Cloud configured with new publishable key).
+- [x] Change any Supabase / Make.com / Telegram passwords the previous developer knew.
+- [x] Run `sql/001_people.sql` and verify admin access.
+- [x] Ship personal-links version (`app.py`) to `main` and clean up `next/`.
 
-## Next: ship the personal-links version (`next/app_personal_links.py`)
-1. In Supabase → SQL Editor, run `sql/001_people.sql`. It returns your admin
-   `access_code`; your link is `https://domestic-gc-analyst.streamlit.app/?u=<access_code>`.
-   (Change `'Owner'` in the file to your name first, or rename yourself later.)
-2. In Make.com, in the module that inserts into `receipts`, map the new
-   `telegram_user_id` field to the Telegram trigger's **Message → From → ID**.
-   Without this, nobody's receipts can be told apart.
-3. Optional: give the existing receipts to yourself. Send one new bill to the bot, find
-   your Telegram ID in the People tab (it appears as an "unlinked sender"), then run
-   `update receipts set telegram_user_id = <your id> where telegram_user_id is null;`
-4. Replace `app.py` with `next/app_personal_links.py` (copy its contents over `app.py`,
-   delete the `next/` folder) and push to `main`. Streamlit redeploys in about a minute.
-   Ask your AI agent to "ship next/app_personal_links.py as app.py".
-5. Open your admin link. In **People**: link yourself to your Telegram sender, then add
-   each family member after they've sent one bill, and send them their link.
-6. Optional: in Streamlit (Share → "Make this app public") switch off email invites so a
-   personal link is all anyone needs. Trade-off: anyone who has someone's link can see
-   that person's receipts. Links can be regenerated from the People tab.
+## Ideas & Backlog
+1. **Retire the legacy Supabase JWT keys:**
+   - Create a new Supabase secret key.
+   - Update the Make.com scenario with the new key.
+   - Test by sending one bill photo via Telegram and confirming it saves.
+   - Disable/retire the legacy Supabase JWT keys in Supabase Project Settings.
+2. **"View everything" option for family members:**
+   - Allow household members to see combined/household-wide grocery spend and trends across all receipts.
+   - Ensure the **People** tab remains strictly restricted to admins.
+3. **Stop duplicate bills at the source in Make.com:**
+   - Before inserting into `receipts`, search Supabase for matching `store_name` + `purchase_date` + `total_amount` to prevent duplicates caused by repeated photo uploads.
+4. **Item quantities from Gemini:**
+   - Update Make.com prompt to ask Gemini for line-item quantities; write to a `quantity` column (supported by `load_data()`).
+5. **Standardized category list:**
+   - Provide a fixed category enumeration in the Gemini prompt so item categorization remains consistent across receipts.
+6. **Telegram bot response with personal link:**
+   - Have the Telegram bot reply to the sender with their personal dashboard link (`https://grocery-dash.streamlit.app/?u=<access_code>`) after processing each receipt.
 
-## Ideas / backlog
-- Stop duplicate bills at the source in Make.com (search before insert).
-- Ask Gemini for quantity per line and store it; the app will use it automatically.
-- Fixed category list in the Gemini prompt so categories stay consistent.
-- Have the Telegram bot reply with the person's dashboard link after each bill.
-
-## Change log
-- 2026-10-24: First version built and deployed; data cleaning (duplicates, store names,
-  fuzzy names, categories); headless fix for Streamlit Cloud.
+## Change Log
+- 2026-10-24: First version built and deployed; data cleaning (duplicates, store names, fuzzy names, categories); headless fix for Streamlit Cloud.
 - 2026-10-25: Personal-links version written (`next/app_personal_links.py`).
-- 2026-11-01: Handover kit added (`AGENTS.md`, `STATUS.md`, `SETUP.md`, `sql/`).
+- 2026-11-01: Handover complete. Repository transferred to Snehil (`Snehil1618/grocery-dashboard`). Deployed to `https://grocery-dash.streamlit.app`. Personal-links version promoted to production `app.py`; `next/` deleted. Supabase publishable key and public URL configured. Backlog updated with key rotation, family view-all, and Make.com deduplication.

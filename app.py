@@ -484,7 +484,7 @@ def load_users() -> tuple[pd.DataFrame, bool]:
 
 
 def app_url() -> str:
-    return str(_secret("app", "public_url", "https://domestic-gc-analyst.streamlit.app")).rstrip("/")
+    return str(_secret("app", "public_url", "https://grocery-dash.streamlit.app")).rstrip("/")
 
 
 def personal_link(code: str) -> str:

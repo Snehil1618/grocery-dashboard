@@ -1,47 +1,69 @@
-# Taking over the grocery dashboard: plain steps
+# Grocery Dashboard Setup & Deployment Guide
 
-You already own the Supabase database and the Make.com automation. These steps move the
-**website** to your accounts too. Allow about 20 minutes.
+This guide documents the setup, deployment, and ongoing maintenance for the grocery dashboard.
 
-## 1. Accept the code (GitHub)
-You'll get an email from GitHub about a repository transfer for `grocery-dashboard`.
-Open it and accept. The code now lives in your GitHub account.
+## Production Deployment (Streamlit Community Cloud)
 
-## 2. Put the website on your Streamlit account
-1. Go to https://share.streamlit.io and choose **Continue with GitHub** (your account).
-2. Allow Streamlit to see **private repositories** when asked. If you skip it, Streamlit
-   will say the repository "does not exist". You can turn it on later under
-   Workspace settings → Linked accounts → Private access → Connect here.
-3. Wait until the previous developer confirms they've deleted their copy of the app.
-4. **Create app** → Deploy from GitHub:
-   - Repository: `<your-username>/grocery-dashboard`
-   - Branch: `main`
-   - Main file path: `app.py`
-   - App URL: `domestic-gc-analyst`
-5. **Advanced settings:** Python **3.12**. In **Secrets**, paste:
+The production dashboard is deployed at: **https://grocery-dash.streamlit.app**
+
+### Configuration
+1. **Repository:** `Snehil1618/grocery-dashboard` (Branch: `main`)
+2. **Main file path:** `app.py`
+3. **Python Version:** 3.12
+4. **Secrets Configuration:**
+   In Streamlit Cloud → App settings → Secrets:
    ```toml
    [supabase]
-   url = "https://cbukojcgfwquykfnnwpu.supabase.co"
-   key = "PASTE YOUR NEW ANON KEY HERE"
+   url = "https://<your-project-ref>.supabase.co"
+   key = "<your-supabase-publishable-key>"
+
+   [app]
+   public_url = "https://grocery-dash.streamlit.app"
    ```
-   (Your anon key is in Supabase → Project Settings → API. Do step 3 first so this is
-   the new key.)
-6. Click **Deploy**. It's ready in 2–3 minutes.
-7. To let someone see it: open the app → **Share** → type their email → **Invite**.
 
-## 3. Lock the old keys
-In Supabase → Project Settings → API, rotate (regenerate) the keys, then paste the new
-anon key into Streamlit → your app → Settings → Secrets. The old key was used on the
-previous developer's computer.
+> [!IMPORTANT]
+> Because this repository is public, never commit real URLs with project IDs, API keys, or access codes to git.
 
-## 4. Keep improving it with an AI agent (Antigravity)
-1. Download the code: in Antigravity (or any Git tool), clone
-   `https://github.com/<your-username>/grocery-dashboard`.
-2. Open the folder in Antigravity. It automatically reads `AGENTS.md`, which explains
-   the whole project to the agent.
-3. To run it on your computer, create `.streamlit/secrets.toml` from
-   `secrets.example.toml` with your Supabase URL and key, then ask the agent to
-   "run the app locally".
-4. Ask the agent to "read STATUS.md and help me ship the personal-links version".
-   That's the next planned step: everyone gets their own private link and only sees
-   their own bills.
+---
+
+## Local Development (Windows / Antigravity)
+
+### 1. Prerequisites
+- Python 3.12
+- Git
+
+### 2. Setup
+1. Clone the repository:
+   ```bash
+   git clone https://github.com/Snehil1618/grocery-dashboard.git
+   cd grocery-dashboard
+   ```
+2. Install dependencies:
+   ```bash
+   python -m pip install -r requirements.txt
+   ```
+3. Set up local secrets:
+   Create `.streamlit/secrets.toml` (copy from `secrets.example.toml`):
+   ```toml
+   [supabase]
+   url = "https://<your-project-ref>.supabase.co"
+   key = "<your-supabase-publishable-key>"
+
+   [app]
+   public_url = "https://grocery-dash.streamlit.app"
+   ```
+4. Run locally:
+   ```bash
+   python -m streamlit run app.py
+   ```
+   Open `http://localhost:8501/?u=<your-admin-access-code>`.
+
+---
+
+## Adding Household Members
+
+1. Log in with your admin link: `https://grocery-dash.streamlit.app/?u=<admin_access_code>`
+2. Go to the **People** tab.
+3. Once a household member sends a bill to the Telegram bot, their Telegram ID appears under unlinked senders.
+4. Add the person by name, link their Telegram sender ID, and share their generated link (`https://grocery-dash.streamlit.app/?u=...`).
+5. Each person sees their own spend and bills automatically without needing passwords.
