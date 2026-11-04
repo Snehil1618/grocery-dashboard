@@ -120,6 +120,25 @@ section[data-testid="stSidebar"] [data-testid="stSidebarUserContent"] {{
 }}
 [data-testid="stMetricDelta"] {{ font-size: 0.8rem !important; font-weight: 500; }}
 
+@media (max-width: 768px) {{
+    .block-container, [data-testid="stMainBlockContainer"] {{
+        padding: 1rem 1rem 2rem 1rem !important;
+    }}
+    [data-testid="column"] {{
+        min-width: calc(50% - 0.5rem) !important;
+        flex: 1 1 calc(50% - 0.5rem) !important;
+    }}
+    [data-testid="stMetric"] {{
+        padding: 0.75rem 0.85rem !important;
+    }}
+    [data-testid="stMetricValue"] {{
+        font-size: 1.25rem !important;
+    }}
+    [data-testid="stMetricLabel"] p {{
+        font-size: 0.7rem !important;
+    }}
+}}
+
 /* Chart cards */
 .card-title {{ font-weight: 600; font-size: 0.98rem; color: {INK}; margin: 0; }}
 .card-sub {{ color: {INK_MUTED}; font-size: 0.8rem; margin: 0.1rem 0 0.4rem 0; }}
@@ -650,6 +669,30 @@ def price_movers(d: pd.DataFrame) -> pd.DataFrame:
     return out.sort_values("change_pct", key=lambda s: s.abs(), ascending=False).reset_index()
 
 
+def emoji_category(cat: str) -> str:
+    """Add a friendly icon to grocery categories."""
+    if not cat or not isinstance(cat, str) or cat.strip() == "":
+        return "🛒 Other"
+    c = cat.lower().strip()
+    if any(w in c for w in ["dairy", "milk", "cheese", "paneer", "curd", "butter", "ghee", "yogurt"]):
+        return f"🥛 {cat}"
+    if any(w in c for w in ["veg", "fruit", "produce", "onion", "potato", "tomato", "vegetable"]):
+        return f"🥬 {cat}"
+    if any(w in c for w in ["grain", "staple", "flour", "atta", "rice", "dal", "pulse", "oil"]):
+        return f"🌾 {cat}"
+    if any(w in c for w in ["snack", "biscuit", "cookie", "bakery", "bread", "chips", "namkeen", "sweet", "choco"]):
+        return f"🍪 {cat}"
+    if any(w in c for w in ["beverage", "drink", "juice", "tea", "coffee", "soda", "water"]):
+        return f"🧃 {cat}"
+    if any(w in c for w in ["clean", "wash", "soap", "detergent", "household", "tissue", "shampoo", "paste"]):
+        return f"🧼 {cat}"
+    if any(w in c for w in ["spice", "masala", "salt", "sugar"]):
+        return f"🧂 {cat}"
+    if any(w in c for w in ["meat", "chicken", "fish", "egg"]):
+        return f"🥚 {cat}"
+    return f"📦 {cat}"
+
+
 def hbar(series: pd.Series, money: bool = True, height: int | None = None) -> go.Figure:
     series = series.sort_values()
     fig = go.Figure(go.Bar(
@@ -689,7 +732,7 @@ def spend_trend(d: pd.DataFrame, freq: str) -> go.Figure:
     return fig
 
 
-def render_overview(d: pd.DataFrame) -> None:
+def render_overview(d: pd.DataFrame, is_admin: bool = False) -> None:
     rec = receipts_table(d)
     total = float(d["item_total_amount"].sum())
     n_rec = len(rec)
@@ -706,11 +749,15 @@ def render_overview(d: pd.DataFrame) -> None:
         delta = f"{(this_sp - last_sp) / last_sp * 100:+.0f}% vs {(this_m - 1).strftime('%b')}"
 
     k1, k2, k3, k4 = st.columns(4)
-    k1.metric("Total spend", inr(total, 0), help="Sum of itemised lines on your receipts.")
-    k2.metric("Receipts", f"{n_rec:,}",
+    k1_label = "Total spend" if is_admin else "Total household spend"
+    k1.metric(k1_label, inr(total, 0), help="Sum of itemised lines on receipts.")
+    k2_label = "Receipts" if is_admin else "Shopping trips"
+    k2.metric(k2_label, f"{n_rec:,}",
               help=f"{d['purchase_date'].min():%d %b %Y} – {latest:%d %b %Y}")
-    k3.metric("Avg basket", inr(avg_basket, 0))
-    k4.metric(f"Spend in {this_m.strftime('%b %Y')}", inr(this_sp, 0),
+    k3_label = "Avg basket" if is_admin else "Avg per trip"
+    k3.metric(k3_label, inr(avg_basket, 0))
+    k4_label = f"Spend in {this_m.strftime('%b %Y')}" if is_admin else f"This month ({this_m.strftime('%b')})"
+    k4.metric(k4_label, inr(this_sp, 0),
               delta=delta, delta_color="inverse")
 
     st.write("")
@@ -719,33 +766,48 @@ def render_overview(d: pd.DataFrame) -> None:
         with st.container(border=True):
             hc, tc = st.columns([1.3, 1])
             with hc:
-                card_header("Spend over time", "Itemised spend per period")
+                s_title = "Spend over time" if is_admin else "Household spend over time"
+                s_sub = "Itemised spend per period" if is_admin else "How much our household spends each month or week"
+                card_header(s_title, s_sub)
             with tc:
-                freq = toggle("Spend granularity", ["Monthly", "Weekly"], key="spend_freq")
+                toggle_label = "Spend granularity" if is_admin else "View by"
+                freq = toggle(toggle_label, ["Monthly", "Weekly"], key="spend_freq")
             chart(spend_trend(d, freq))
     with right:
         with st.container(border=True):
-            card_header("Spend by category", "Where the money goes")
-            chart(hbar(d.groupby("category")["item_total_amount"].sum(), height=320))
+            c_title = "Spend by category"
+            c_sub = "Where the money goes" if is_admin else "Where our grocery money goes"
+            card_header(c_title, c_sub)
+            cat_spend = d.groupby("category")["item_total_amount"].sum()
+            cat_spend.index = cat_spend.index.map(emoji_category)
+            chart(hbar(cat_spend, height=max(240, 36 * len(cat_spend) + 40)))
 
     left, right = st.columns([1.35, 1], gap="medium")
     with left:
         with st.container(border=True):
-            card_header("Top items by spend", "Your 10 biggest line items")
+            top_title = "Top items by spend" if is_admin else "Our biggest grocery expenses"
+            top_sub = "Your 10 biggest line items" if is_admin else "What we spend the most on"
+            card_header(top_title, top_sub)
             top = d.groupby("standard_item_name")["item_total_amount"].sum().nlargest(10)
             chart(hbar(top))
     with right:
         with st.container(border=True):
-            card_header("Spend by store", "Total across receipts")
+            st_title = "Spend by store" if is_admin else "Where we shop"
+            st_sub = "Total across receipts" if is_admin else "Most visited grocery shops"
+            card_header(st_title, st_sub)
             chart(hbar(d.groupby("store_name")["item_total_amount"].sum(),
                        height=max(160, 44 * d["store_name"].nunique() + 40)))
         with st.container(border=True):
-            card_header("Most frequently bought", "Number of times on a receipt")
+            freq_title = "Most frequently bought" if is_admin else "Bought most often"
+            freq_sub = "Number of times on a receipt" if is_admin else "Items we buy regularly"
+            card_header(freq_title, freq_sub)
             freq_items = d.groupby("standard_item_name")["receipt_id"].nunique().nlargest(5)
             chart(hbar(freq_items, money=False))
 
     with st.container(border=True):
-        card_header("Price changes", "Items bought on 2+ dates — first vs latest price")
+        pc_title = "Price changes" if is_admin else "Price changes (Inflation)"
+        pc_sub = "Items bought on 2+ dates — first vs latest price" if is_admin else "Items that got more expensive or cheaper"
+        card_header(pc_title, pc_sub)
         movers = price_movers(d)
         if movers.empty:
             st.caption("Not enough repeat purchases yet. This fills in as more receipts come in.")
@@ -799,7 +861,7 @@ def render_receipts(d: pd.DataFrame) -> None:
 # ──────────────────────────────────────────────────────────────────────────────
 # Item explorer (the original single-item view)
 # ──────────────────────────────────────────────────────────────────────────────
-def render_item_explorer(df: pd.DataFrame) -> None:
+def render_item_explorer(df: pd.DataFrame, is_admin: bool = False) -> None:
     c1, c2 = st.columns([1, 2])
     with c1:
         categories = sorted(df["category"].unique())
@@ -818,10 +880,12 @@ def render_item_explorer(df: pd.DataFrame) -> None:
 
     d = df[df["standard_item_name"] == item].sort_values("purchase_date")
     variants = sorted(d["item_name"].unique())
+    variants_text = f'{len(variants)} receipt spelling{"s" if len(variants) != 1 else ""} merged' if is_admin else 'Grocery item'
+    cat_name = d["category"].mode().iat[0] if not d["category"].empty else "Groceries"
     st.markdown(
         f'<div class="page-title" style="font-size:1.35rem;margin-top:.5rem">{item}</div>'
-        f'<div class="page-sub"><span class="chip">{d["category"].mode().iat[0]}</span>'
-        f'{len(variants)} receipt spelling{"s" if len(variants) != 1 else ""} merged</div>',
+        f'<div class="page-sub"><span class="chip">{emoji_category(cat_name)}</span>'
+        f'{variants_text}</div>',
         unsafe_allow_html=True,
     )
 
@@ -840,7 +904,8 @@ def render_item_explorer(df: pd.DataFrame) -> None:
               help=f"First bought {d['purchase_date'].iloc[0]:%d %b %Y}")
     k3.metric("Total units", f"{total_units:,}",
               help="Quantity is not stored in the database yet, so each line item counts as 1 unit.")
-    k4.metric("% Inflation", f"{inflation:+.1f}%",
+    k4_title = "% Inflation" if is_admin else "% Price Change"
+    k4.metric(k4_title, f"{inflation:+.1f}%",
               delta="Price up" if inflation > 0 else ("Price down" if inflation < 0 else "Flat"),
               delta_color="inverse" if inflation else "off")
 
@@ -848,17 +913,20 @@ def render_item_explorer(df: pd.DataFrame) -> None:
     left, right = st.columns([1.35, 1], gap="medium")
     with left:
         with st.container(border=True):
-            card_header("Unit price over time",
-                        "Average price paid per purchase date" +
-                        (", split by store" if d["store_name"].nunique() > 1 else ""))
+            up_title = "Unit price over time" if is_admin else "Price over time"
+            up_sub = ("Average price paid per purchase date" + (", split by store" if d["store_name"].nunique() > 1 else "")) if is_admin else "Price paid on each shopping trip"
+            card_header(up_title, up_sub)
             chart(price_chart(d))
     with right:
         with st.container(border=True):
             hc, tc = st.columns([1.3, 1])
             with hc:
-                card_header("Consumption volume", "Units bought per period")
+                vol_title = "Consumption volume" if is_admin else "How much we buy"
+                vol_sub = "Units bought per period" if is_admin else "Number of units bought over time"
+                card_header(vol_title, vol_sub)
             with tc:
-                freq = toggle("Granularity", ["Weekly", "Monthly"], key="freq")
+                toggle_freq = "Granularity" if is_admin else "View by"
+                freq = toggle(toggle_freq, ["Weekly", "Monthly"], key="freq")
             chart(volume_chart(d, freq))
 
     with st.expander(f"Purchase history · {len(d)} rows"):
@@ -1001,9 +1069,9 @@ def main() -> None:
         return
 
     with tabs[0]:
-        render_overview(df)
+        render_overview(df, is_admin=profile["is_admin"])
     with tabs[1]:
-        render_item_explorer(df)
+        render_item_explorer(df, is_admin=profile["is_admin"])
     if profile["is_admin"]:
         with tabs[2]:
             render_receipts(df)
