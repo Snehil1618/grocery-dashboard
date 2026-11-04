@@ -914,7 +914,7 @@ def main() -> None:
         st.markdown(
             f'<div class="user-card"><div class="user-avatar">{initial}</div>'
             f'<div><div class="user-name">{profile["name"]}</div>'
-            f'<div class="user-meta">{"Admin" if profile["is_admin"] else "Personal dashboard"}</div>'
+            f'<div class="user-meta">{"Admin" if profile["is_admin"] else "Household member"}</div>'
             f'</div></div>', unsafe_allow_html=True)
 
         view = profile["name"]
@@ -940,10 +940,14 @@ def main() -> None:
     elif profile["is_admin"] and view != profile["name"]:
         uid = users.loc[users["display_name"] == view, "telegram_user_id"].iloc[0]
         df = df_all[df_all["telegram_user_id"] == uid]
-    elif pd.notna(profile["telegram_user_id"]):
-        df = df_all[df_all["telegram_user_id"] == profile["telegram_user_id"]]
+    elif profile["is_admin"]:
+        if pd.notna(profile["telegram_user_id"]):
+            df = df_all[df_all["telegram_user_id"] == profile["telegram_user_id"]]
+        else:
+            df = df_all
     else:
-        df = df_all.iloc[0:0]
+        # Non-admin family members see household totals
+        df = df_all
 
     with st.sidebar:
         if not df.empty:
@@ -961,7 +965,7 @@ def main() -> None:
             st.caption(f"{dupes} duplicate receipt{'s' if dupes != 1 else ''} ignored")
 
     # 5. Header
-    who = ("your household" if view == EVERYONE else
+    who = ("your household" if (not profile["is_admin"] or view == EVERYONE) else
            "receipts with no sender" if view == UNASSIGNED else
            "you" if view == profile["name"] else view)
     st.markdown(
@@ -971,12 +975,14 @@ def main() -> None:
         unsafe_allow_html=True,
     )
 
-    tab_names = ["Overview", "Items", "Receipts"] + (["People"] if profile["is_admin"] else [])
-    tabs = st.tabs(tab_names)
-
     if profile["is_admin"]:
+        tab_names = ["Overview", "Items", "Receipts", "People"]
+        tabs = st.tabs(tab_names)
         with tabs[3]:
             render_people(users, df_all, profile)
+    else:
+        tab_names = ["Overview", "Items"]
+        tabs = st.tabs(tab_names)
 
     if df.empty:
         with tabs[0]:
@@ -998,8 +1004,9 @@ def main() -> None:
         render_overview(df)
     with tabs[1]:
         render_item_explorer(df)
-    with tabs[2]:
-        render_receipts(df)
+    if profile["is_admin"]:
+        with tabs[2]:
+            render_receipts(df)
 
 
 if __name__ == "__main__":

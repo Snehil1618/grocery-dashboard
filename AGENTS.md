@@ -67,15 +67,17 @@ RLS is enabled.
 
 Layout, top to bottom: page config and design tokens → CSS (`inject_css`) → data layer (`get_client`, `_fetch_all` pages through PostgREST's 1000-row limit, `load_data`, `load_users`) → cleaning → user authentication (`current_profile`) → charts → UI.
 
-### Navigation & Personal Links
-The personal-links version is the production app:
-- Users open a **personal link**: `https://grocery-dash.streamlit.app/?u=<access_code>`. Opening it filters the dashboard to show *their* receipts (matched by `receipts.telegram_user_id`). No logins or passwords needed.
+### Navigation, Roles & Personal Links
+- Users open a **personal link**: `https://grocery-dash.streamlit.app/?u=<access_code>`. No logins or passwords needed.
 - If no valid `?u=` code is provided, a friendly gate screen asks for their access code.
-- **Tabs:**
+- **Roles & Tabs:**
+  - **Family Members (Non-admins):** Get a clean 2-tab view (**Overview** and **Items**) showing the combined household grocery analytics across all receipts. Raw receipts, Telegram details, and admin settings are completely hidden.
+  - **Admins:** Get all 4 tabs (**Overview**, **Items**, **Receipts**, and **People**).
+- **Tabs Breakdown:**
   - **Overview:** Total spend, receipt count, average basket, this month vs last month, spend over time, category breakdown, store frequency, top items, and price-change table.
   - **Items:** Single-item view with price inflation metrics, price-over-time line chart, weekly/monthly consumption bar chart, and item purchase history.
-  - **Receipts:** Interactive list of receipts and line items per bill.
-  - **People (Admins only):** Add household members, link users to Telegram sender IDs, and copy, regenerate, or remove personal access links.
+  - **Receipts (Admin only):** Interactive list of receipts and line items per bill.
+  - **People (Admin only):** Add household members, link users to Telegram sender IDs, and copy, regenerate, or remove personal access links.
 - Admins have a "Showing" selector in the sidebar: Everyone / each person / unlinked senders / old receipts with no sender.
 
 ### Data Cleaning Rules (in `load_data` and friends)
