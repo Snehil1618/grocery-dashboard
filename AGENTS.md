@@ -6,7 +6,7 @@ This file and `STATUS.md` are the source of truth. **Keep both up to date whenev
 
 ## What this is
 
-A grocery analytics dashboard for a household. People photograph their shop bills and send them to a Telegram bot; the numbers end up on a web dashboard showing spend, price changes ("inflation"), and how much of each item is bought over time.
+A grocery analytics dashboard for a household. People photograph their shop bills and send them to a Telegram bot; the numbers end up on a web dashboard showing spend, price changes ("inflation"), store price benchmarking, and how much of each item is bought over time.
 
 The people who *use* the dashboard are not technical. They must never need to install anything, create accounts, or touch settings. All technical work (Supabase, Make.com, Streamlit, GitHub) belongs to the owner.
 
@@ -24,6 +24,8 @@ Telegram bot ──► Make.com scenario ──► Supabase (Postgres) ──►
 
 - **Telegram bot / Make.com / Supabase:** Belong to the owner's accounts.
   Nothing about them lives in this repo except SQL files in `sql/`.
+- **Receipt Processing:** Gemini reads printed supermarket bills, digital receipts, and clean, legible handwritten shop chits/slips photographed and sent to the bot.
+- **Raw Data Ingestion:** Supabase acts as an immutable, append-only log of real receipts. Deduplication and cleaning are handled safely inside the dashboard application (`load_data`) without risking accidental data loss.
 - **App:** Single file, `app.py` (Python, Streamlit, pandas, Plotly, thefuzz, supabase-py).
   Hosted on Streamlit Community Cloud from this repo's `main` branch.
   **Every push to `main` redeploys the live app within about a minute.**
@@ -61,23 +63,24 @@ RLS is enabled.
 - Policies:
   - `receipts`, `line_items`: anon/publishable may SELECT (`sql/000_read_policies.sql`, applied).
   - `dashboard_users`: anon/publishable may SELECT/INSERT/UPDATE/DELETE (`sql/001_people.sql`, applied; managed in the People tab).
-- **Make.com keys:** Make.com currently connects using legacy Supabase JWT keys. Migrating Make.com to a new secret key and retiring the legacy keys is on the backlog.
 
 ## The App (`app.py`)
 
 Layout, top to bottom: page config and design tokens → CSS (`inject_css`) → data layer (`get_client`, `_fetch_all` pages through PostgREST's 1000-row limit, `load_data`, `load_users`) → cleaning → user authentication (`current_profile`) → charts → UI.
 
-### Navigation, Roles & Personal Links
+### Navigation, Roles & Tabs
 - Users open a **personal link**: `https://grocery-dash.streamlit.app/?u=<access_code>`. No logins or passwords needed.
 - If no valid `?u=` code is provided, a friendly gate screen asks for their access code.
 - **Roles & Tabs:**
-  - **Family Members (Non-admins):** Get a clean 2-tab view (**Overview** and **Items**) showing the combined household grocery analytics across all receipts. Raw receipts, Telegram details, and admin settings are completely hidden.
-  - **Admins:** Get all 4 tabs (**Overview**, **Items**, **Receipts**, and **People**).
-- **Tabs Breakdown:**
-  - **Overview:** Total spend, receipt count, average basket, this month vs last month, spend over time, category breakdown, store frequency, top items, and price-change table.
-  - **Items:** Single-item view with price inflation metrics, price-over-time line chart, weekly/monthly consumption bar chart, and item purchase history.
-  - **Receipts (Admin only):** Interactive list of receipts and line items per bill.
-  - **People (Admin only):** Add household members, link users to Telegram sender IDs, and copy, regenerate, or remove personal access links.
+  - **Family Members (Non-admins — 2 Tabs):**
+    - **Overview:** Combined household grocery spend, budget pacing, category distributions with emojis, where we shop, top items, and simplified price movers.
+    - **Items:** Single-item view with price history, consumption charts, and price changes.
+  - **Admins (5 Tabs):**
+    - **Overview:** Full household overview with customizable monthly budget pacing (daily velocity & projected month-end), grocery inflation index, category breakdown, store frequency, and price changes.
+    - **Items:** Deep single-item explorer with OCR variant auditing and consumption breakdown.
+    - **Stores (Price Intelligence):** Head-to-head store price comparison ("Who is Cheaper?"), store price differentials, and savings potential across common items.
+    - **Receipts:** Interactive receipt browser, individual bill inspector, and **1-Click Clean CSV Data Export**.
+    - **People:** Household member link generator and Telegram sender linking.
 - Admins have a "Showing" selector in the sidebar: Everyone / each person / unlinked senders / old receipts with no sender.
 
 ### Data Cleaning Rules (in `load_data` and friends)

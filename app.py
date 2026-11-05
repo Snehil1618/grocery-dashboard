@@ -748,6 +748,46 @@ def render_overview(d: pd.DataFrame, is_admin: bool = False) -> None:
     if last_sp:
         delta = f"{(this_sp - last_sp) / last_sp * 100:+.0f}% vs {(this_m - 1).strftime('%b')}"
 
+    # ── Monthly Budget Pacing ──────────────────────────────────────────────────
+    budget = float(st.session_state.get("monthly_budget", 15000))
+    if budget > 0:
+        pct_used = min(this_sp / budget, 1.0)
+        remaining = budget - this_sp
+        days_in_m = this_m.days_in_month
+        cur_day = min(int(latest.day), days_in_m)
+        expected_to_date = (budget / days_in_m) * cur_day
+        projected_spend = (this_sp / cur_day) * days_in_m if cur_day > 0 else this_sp
+
+        if this_sp > budget:
+            status_text = f"⚠️ Over budget by {inr(this_sp - budget, 0)}"
+            badge_color = NEGATIVE
+        elif this_sp > expected_to_date * 1.15:
+            status_text = f"🔥 High velocity (~{inr(this_sp/cur_day, 0)}/day) · Projected: {inr(projected_spend, 0)}"
+            badge_color = "#E0A43C"
+        else:
+            status_text = f"✅ On track ({int(pct_used*100)}% used) · {inr(max(0, remaining), 0)} left"
+            badge_color = POSITIVE
+
+        with st.container(border=True):
+            b_left, b_right = st.columns([2.5, 1])
+            with b_left:
+                b_title = f"🎯 Monthly Budget · {this_m.strftime('%B %Y')}" if is_admin else f"🎯 Household Grocery Budget · {this_m.strftime('%B %Y')}"
+                st.markdown(
+                    f'<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">'
+                    f'<span style="font-weight:600;font-size:0.95rem;color:{INK}">{b_title}</span>'
+                    f'<span style="font-size:0.8rem;font-weight:600;color:{badge_color}">{status_text}</span>'
+                    f'</div>', unsafe_allow_html=True
+                )
+                st.progress(pct_used)
+            with b_right:
+                st.markdown(
+                    f'<div style="text-align:right">'
+                    f'<div style="font-size:1.15rem;font-weight:700;color:{INK}">{inr(this_sp, 0)} <span style="font-size:0.85rem;color:{INK_MUTED};font-weight:400">/ {inr(budget, 0)}</span></div>'
+                    f'<div style="font-size:0.75rem;color:{INK_MUTED}">Day {cur_day} of {days_in_m}</div>'
+                    f'</div>', unsafe_allow_html=True
+                )
+        st.write("")
+
     k1, k2, k3, k4 = st.columns(4)
     k1_label = "Total spend" if is_admin else "Total household spend"
     k1.metric(k1_label, inr(total, 0), help="Sum of itemised lines on receipts.")
@@ -812,6 +852,18 @@ def render_overview(d: pd.DataFrame, is_admin: bool = False) -> None:
         if movers.empty:
             st.caption("Not enough repeat purchases yet. This fills in as more receipts come in.")
         else:
+            inf = inflation_index(movers)
+            inf_val = inf["avg_inflation"]
+            inf_color = NEGATIVE if inf_val > 0 else (POSITIVE if inf_val < 0 else INK_MUTED)
+            st.markdown(
+                f'<div style="display:flex;align-items:center;gap:12px;margin:8px 0 14px 0;font-size:0.85rem;color:{INK_MUTED}">'
+                f'<span>Average Basket Inflation: <b style="color:{inf_color}">{inf_val:+.1f}%</b></span>'
+                f'<span>·</span>'
+                f'<span>📈 <b>{inf["risers"]}</b> items up</span>'
+                f'<span>·</span>'
+                f'<span>📉 <b>{inf["fallers"]}</b> items down</span>'
+                f'</div>', unsafe_allow_html=True
+            )
             st.dataframe(
                 movers[["standard_item_name", "first_price", "latest_price", "change_pct",
                         "times", "latest_date"]].head(15),
@@ -827,8 +879,111 @@ def render_overview(d: pd.DataFrame, is_admin: bool = False) -> None:
             )
 
 
+def inflation_index(movers: pd.DataFrame) -> dict:
+    if movers.empty:
+        return {"avg_inflation": 0.0, "risers": 0, "fallers": 0, "flat": 0}
+    avg_inf = float(movers["change_pct"].mean())
+    risers = int((movers["change_pct"] > 0).sum())
+    fallers = int((movers["change_pct"] < 0).sum())
+    flat = int((movers["change_pct"] == 0).sum())
+    return {"avg_inflation": avg_inf, "risers": risers, "fallers": fallers, "flat": flat}
+
+
+def render_store_comparison(df: pd.DataFrame) -> None:
+    st.markdown(
+        f'<div class="page-eyebrow">Price Intelligence</div>'
+        f'<div class="page-title">Store Price Comparison</div>'
+        f'<div class="page-sub">Compare prices of identical groceries across different stores to find where you save the most.</div>',
+        unsafe_allow_html=True,
+    )
+
+    # Find items bought at 2 or more distinct stores
+    store_counts = df.groupby("standard_item_name")["store_name"].nunique()
+    shared_items = sorted(store_counts[store_counts >= 2].index.tolist())
+
+    if not shared_items:
+        with st.container(border=True):
+            st.info(
+                "🏪 **No multi-store purchases yet.**\n\n"
+                "Once you buy the same grocery items across two or more different shops, "
+                "this tab will automatically benchmark prices side-by-side and highlight where you get the best deal!"
+            )
+        return
+
+    shared_df = df[df["standard_item_name"].isin(shared_items)].copy()
+    price_matrix = (shared_df.groupby(["standard_item_name", "store_name"])["unit_price"]
+                            .mean()
+                            .unstack())
+
+    # Summary KPIs
+    c1, c2, c3 = st.columns(3)
+    c1.metric("Items Compared", f"{len(shared_items)}", help="Groceries bought at 2+ different stores.")
+    stores_list = sorted(shared_df["store_name"].unique())
+    c2.metric("Stores Benchmarked", f"{len(stores_list)}")
+
+    # Compute average price spread across stores
+    variances = []
+    for item in shared_items:
+        prices = price_matrix.loc[item].dropna()
+        if len(prices) >= 2:
+            p_max, p_min = prices.max(), prices.min()
+            if p_min > 0:
+                variances.append((p_max - p_min) / p_min * 100)
+    avg_var = sum(variances) / len(variances) if variances else 0.0
+    c3.metric("Avg Price Spread", f"{avg_var:.1f}%", help="Average percentage difference between the most expensive and cheapest store for the same item.")
+
+    st.write("")
+
+    with st.container(border=True):
+        card_header("Head-to-Head Item Prices", "Lowest price highlighted per item")
+        rows = []
+        for item in shared_items:
+            prices = price_matrix.loc[item].dropna()
+            cheapest_store = prices.idxmin()
+            cheapest_price = prices.min()
+            priciest_store = prices.idxmax()
+            priciest_price = prices.max()
+            diff = priciest_price - cheapest_price
+            diff_pct = (diff / cheapest_price * 100) if cheapest_price else 0.0
+
+            row = {
+                "Item": item,
+                "Cheapest Store": f"🏆 {cheapest_store} ({inr(cheapest_price)})",
+                "Most Expensive": f"{priciest_store} ({inr(priciest_price)})",
+                "Potential Savings": f"{inr(diff)} ({diff_pct:+.0f}%)",
+                "Stores": len(prices),
+            }
+            rows.append(row)
+
+        comp_df = pd.DataFrame(rows).sort_values("Item")
+        st.dataframe(comp_df, hide_index=True, width="stretch")
+
+    st.write("")
+
+    with st.container(border=True):
+        card_header("Compare a Specific Item", "Price comparison by store for an individual grocery item")
+        sel_item = st.selectbox("Select grocery item", shared_items, key="store_comp_item")
+        if sel_item:
+            item_prices = price_matrix.loc[sel_item].dropna().sort_values()
+            fig = hbar(item_prices, money=True)
+            chart(fig)
+
+
 def render_receipts(d: pd.DataFrame) -> None:
     rec = receipts_table(d)
+    if not d.empty:
+        exp_cols = ["purchase_date", "store_name", "standard_item_name", "item_name", "category", "unit_price", "quantity", "item_total_amount", "receipt_id"]
+        avail_cols = [c for c in exp_cols if c in d.columns]
+        export_df = d[avail_cols].copy().sort_values("purchase_date", ascending=False)
+        csv_data = export_df.to_csv(index=False).encode("utf-8")
+        st.download_button(
+            label="📥 Export All Transactions (CSV)",
+            data=csv_data,
+            file_name=f"grocery_purchases_{pd.Timestamp.now():%Y%m%d}.csv",
+            mime="text/csv",
+            help="Download all clean, normalized transactions for Excel or Python analysis."
+        )
+        st.write("")
     st.dataframe(
         rec[["date", "store", "items", "spend", "billed"]],
         hide_index=True, width="stretch",
@@ -1025,6 +1180,9 @@ def main() -> None:
             sel_stores = (st.multiselect("Shops", stores, default=stores)
                           if len(stores) > 1 else stores)
         st.divider()
+        st.markdown('<p style="font-size:0.8rem;font-weight:600;color:#64748B;margin-bottom:4px;text-transform:uppercase;letter-spacing:0.05em">Monthly Budget Target</p>', unsafe_allow_html=True)
+        st.number_input("Monthly Budget (₹)", min_value=0, max_value=500000, value=int(st.session_state.get("monthly_budget", 15000)), step=1000, key="monthly_budget", label_visibility="collapsed")
+        st.divider()
         if st.button("↻ Refresh", width="stretch"):
             st.cache_data.clear()
             st.rerun()
@@ -1044,9 +1202,9 @@ def main() -> None:
     )
 
     if profile["is_admin"]:
-        tab_names = ["Overview", "Items", "Receipts", "People"]
+        tab_names = ["Overview", "Items", "Stores", "Receipts", "People"]
         tabs = st.tabs(tab_names)
-        with tabs[3]:
+        with tabs[4]:
             render_people(users, df_all, profile)
     else:
         tab_names = ["Overview", "Items"]
@@ -1074,6 +1232,8 @@ def main() -> None:
         render_item_explorer(df, is_admin=profile["is_admin"])
     if profile["is_admin"]:
         with tabs[2]:
+            render_store_comparison(df)
+        with tabs[3]:
             render_receipts(df)
 
 
